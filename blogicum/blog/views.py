@@ -42,8 +42,8 @@ class PostUpdateMixin:
                                      is_published=True,
                                      pub_date__lte=now(),
                                      category__is_published=True)
-        if (not self.request.user.is_authenticated or
-                instance.author != self.request.user):
+        if (not self.request.user.is_authenticated
+                or instance.author != self.request.user):
             return redirect('blog:post_detail', pk=self.kwargs['pk'])
         return super().dispatch(request, *args, **kwargs)
 
