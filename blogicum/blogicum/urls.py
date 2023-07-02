@@ -1,21 +1,16 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import include, path, reverse_lazy
-from django.views.generic.edit import CreateView
+from django.urls import include, path
 
-from blog.forms import RegistrateForm
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('blog.urls')),
     path('pages/', include('pages.urls')),
+    path('user/', include('user.urls')),
     path('auth/', include('django.contrib.auth.urls')),
-    path('auth/registration/', CreateView.as_view(
-        template_name='registration/registration_form.html',
-        form_class=RegistrateForm,
-        success_url=reverse_lazy('blog:index')),
-        name='registration'),
+
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG:

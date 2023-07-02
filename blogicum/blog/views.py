@@ -11,7 +11,7 @@ from django.views.generic import (CreateView,
                                   )
 from django.views.generic.list import MultipleObjectMixin
 
-from blog.forms import PostForm, CommentForm, UserForm, RegistrateForm
+from blog.forms import PostForm, CommentForm, UserForm
 from blog.models import Category, Post, Comment, User
 
 
@@ -217,9 +217,3 @@ class CommentUpdateView(LoginRequiredMixin, CommentUpdateMixin, UpdateView):
 
 class CommentDeleteView(LoginRequiredMixin, CommentUpdateMixin, DeleteView):
     pass
-
-
-class SignUpView(CreateView):
-    form_class = RegistrateForm
-    success_url = reverse_lazy('blog:index')
-    template_name = 'registration/registration_form.html'

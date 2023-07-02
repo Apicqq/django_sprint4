@@ -116,4 +116,4 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 MEDIA_URL = 'media/'
 
-AUTHENTICATION_BACKENDS = ('blog.utils.EmailBackend',)
+AUTHENTICATION_BACKENDS = ('user.utils.EmailBackend',)
