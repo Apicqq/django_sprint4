@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -15,22 +16,6 @@ from blog.forms import PostForm, CommentForm, UserForm
 from blog.models import Category, Post, Comment, User
 
 
-class BlogMixin:
-    model = Post
-    queryset = Post.objects.select_related(
-        'category',
-        'author',
-        'location'
-    ).prefetch_related('comments').filter(
-        Q(is_published=True)
-        & Q(pub_date__lte=now())
-        & Q(category__is_published=True)
-    ).annotate(comment_count=Count('comments'))
-    paginate_by = 10
-    template_name = 'blog/index.html'
-    ordering = ('-pub_date',)
-
-
 class PostUpdateMixin:
     model = Post
     form_class = PostForm
@@ -39,9 +24,7 @@ class PostUpdateMixin:
     def dispatch(self, request, *args, **kwargs):
         instance = get_object_or_404(Post,
                                      pk=kwargs['pk'],
-                                     is_published=True,
-                                     pub_date__lte=now(),
-                                     category__is_published=True)
+                                     )
         if (not self.request.user.is_authenticated
                 or instance.author != self.request.user):
             return redirect('blog:post_detail', pk=self.kwargs['pk'])
@@ -61,19 +44,46 @@ class CommentUpdateMixin:
         return reverse('blog:post_detail', kwargs={'pk': comment.post.pk})
 
 
-class BlogListView(BlogMixin, ListView):
-    pass
+class BlogListView(ListView):
+    model = Post
+    queryset = Post.objects.select_related(
+        'category',
+        'author',
+        'location'
+    ).filter(
+        Q(is_published=True)
+        & Q(pub_date__lte=now())
+        & Q(category__is_published=True)
+    ).prefetch_related('comments').annotate(comment_count=Count('comments'))
+    paginate_by = 10
+    template_name = 'blog/index.html'
+    ordering = ('-pub_date',)
 
 
-class BlogCategoryView(BlogMixin, ListView):
-    def get_context_data(self, *, object_list=None, **kwargs):
+class BlogCategoryView(ListView):
+    model = Post
+    template_name = 'blog/category.html'
+    paginate_by = 10
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['category'] = get_object_or_404(
+            Category,
+            is_published=True,
+            slug=self.kwargs['category_slug'])
+        return context
+
+    def get_queryset(self):
         category = get_object_or_404(
             Category,
             is_published=True,
             slug=self.kwargs['category_slug'])
-        context = super(BlogCategoryView, self).get_context_data(
-            category=category, **kwargs)
-        return context
+        return category.posts.filter(
+            Q(is_published=True)
+            & Q(pub_date__lte=now())
+            & Q(category__is_published=True)
+        ).order_by('-pub_date').prefetch_related('comments').annotate(
+            comment_count=Count('comments'))
 
 
 class PostCreateView(LoginRequiredMixin, CreateView):
@@ -103,11 +113,14 @@ class PostDetailView(DetailView):
         return context
 
     def dispatch(self, request, *args, **kwargs):
-        get_object_or_404(Post,
-                          pk=kwargs['pk'],
-                          is_published=True,
-                          pub_date__lte=now(),
-                          category__is_published=True)
+        instance = get_object_or_404(Post,
+                                     pk=kwargs['pk'],
+                                     )
+        if (instance.author != self.request.user
+                and (not instance.is_published
+                     or not instance.category.is_published
+                     or instance.pub_date >= now())):
+            raise PermissionDenied()
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -128,20 +141,40 @@ class UserDetailView(DetailView, MultipleObjectMixin):
 
     def get_context_data(self, **kwargs):
         profile = get_object_or_404(
-            User,
+            self.model,
             username=self.kwargs['username'])
-        object_list = Post.objects.filter(
-            author=profile,
-        ).select_related(
-            'category',
-            'author',
-            'location'
-        ).annotate(
-            comment_count=Count('comments')).order_by('-pub_date')
-        context = super(UserDetailView, self).get_context_data(
-            object_list=object_list,
-            profile=profile, **kwargs
-        )
+        if (not self.request.user.is_authenticated
+                or self.request.user != profile):
+            object_list = Post.objects.filter(
+                author=profile,
+                is_published=True,
+                category__is_published=True,
+                pub_date__lte=now()
+            ).select_related(
+                'category',
+                'author',
+                'location'
+            ).annotate(
+                comment_count=Count('comments')
+            ).order_by('-pub_date')
+            context = super(UserDetailView, self).get_context_data(
+                object_list=object_list,
+                profile=profile, **kwargs
+            )
+        else:
+            object_list = Post.objects.filter(
+                author=profile,
+            ).select_related(
+                'category',
+                'author',
+                'location'
+            ).annotate(
+                comment_count=Count('comments')
+            ).order_by('-pub_date')
+            context = super(UserDetailView, self).get_context_data(
+                object_list=object_list,
+                profile=profile, **kwargs
+            )
         return context
 
 
