@@ -1,7 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.timezone import now
 from django.views.generic import (CreateView,
@@ -120,7 +119,7 @@ class PostDetailView(DetailView):
                 and (not instance.is_published
                      or not instance.category.is_published
                      or instance.pub_date >= now())):
-            raise PermissionDenied()
+            raise Http404()
         return super().dispatch(request, *args, **kwargs)
 
 
