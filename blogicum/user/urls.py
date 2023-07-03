@@ -1,17 +1,12 @@
 from django.conf import settings
-from django.urls import include, path, reverse_lazy
-from django.views.generic.edit import CreateView
+from django.urls import include, path
 
-from user.forms import RegistrateForm
+from user.views import SignUpView
 
 app_name = 'user'
 
 urlpatterns = [
-    path('auth/registration/', CreateView.as_view(
-        template_name='registration/registration_form.html',
-        form_class=RegistrateForm,
-        success_url=reverse_lazy('blog:index')),
-        name='registration'),
+    path('auth/registration/', SignUpView.as_view(), name='registration'),
 ]
 
 if settings.DEBUG:

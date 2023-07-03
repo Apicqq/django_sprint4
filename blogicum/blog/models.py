@@ -2,13 +2,14 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.urls import reverse
 
-from core.models import BaseModel
+from core.models import PublishedCreatedModel
+from .utils import STRING_MAX_LENGTH, TITLE_MAX_LENGTH
 
 User = get_user_model()
 
 
-class Post(BaseModel):
-    title = models.CharField('Заголовок', max_length=256)
+class Post(PublishedCreatedModel):
+    title = models.CharField('Заголовок', max_length=STRING_MAX_LENGTH)
     text = models.TextField('Текст')
     pub_date = models.DateTimeField(
         'Дата и время публикации',
@@ -39,21 +40,21 @@ class Post(BaseModel):
         blank=True
     )
 
-    class Meta(BaseModel.Meta):
+    class Meta(PublishedCreatedModel.Meta):
         verbose_name = 'публикация'
         verbose_name_plural = 'Публикации'
         default_related_name = 'posts'
         ordering = ('pub_date',)
 
     def __str__(self):
-        return self.title[:30]
+        return self.title[:TITLE_MAX_LENGTH]
 
     def get_absolute_url(self):
-        return reverse('blog:post_detail', kwargs={'pk': self.pk})
+        return reverse('blog:post_detail', kwargs={'post_id': self.pk})
 
 
-class Category(BaseModel):
-    title = models.CharField('Заголовок', max_length=256)
+class Category(PublishedCreatedModel):
+    title = models.CharField('Заголовок', max_length=STRING_MAX_LENGTH)
     description = models.TextField(verbose_name='Описание')
     slug = models.SlugField(
         unique=True,
@@ -61,27 +62,27 @@ class Category(BaseModel):
         help_text='Идентификатор страницы для URL; разрешены символы латиницы,'
                   ' цифры, дефис и подчёркивание.')
 
-    class Meta(BaseModel.Meta):
+    class Meta(PublishedCreatedModel.Meta):
         verbose_name = 'категория'
         verbose_name_plural = 'Категории'
 
     def __str__(self):
-        return self.title[:30]
+        return self.title[:TITLE_MAX_LENGTH]
 
 
-class Location(BaseModel):
-    name = models.CharField('Название места', max_length=256)
+class Location(PublishedCreatedModel):
+    name = models.CharField('Название места', max_length=STRING_MAX_LENGTH)
 
-    class Meta(BaseModel.Meta):
+    class Meta(PublishedCreatedModel.Meta):
         verbose_name = 'местоположение'
         verbose_name_plural = 'Местоположения'
 
     def __str__(self):
-        return self.name[:30]
+        return self.name[:TITLE_MAX_LENGTH]
 
 
-class Comment(models.Model):
-    text = models.TextField('Текст комментария', max_length=256)
+class Comment(PublishedCreatedModel):
+    text = models.TextField('Текст комментария', max_length=STRING_MAX_LENGTH)
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -92,8 +93,6 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
         verbose_name='Публикация'
     )
-    created_at = models.DateTimeField(auto_now_add=True,
-                                      verbose_name='Добавлено')
 
     class Meta:
         ordering = ('created_at',)
@@ -102,7 +101,7 @@ class Comment(models.Model):
         verbose_name_plural = 'Комментарии'
 
     def __str__(self):
-        return self.text[:30]
+        return self.text[:TITLE_MAX_LENGTH]
 
     def get_absolute_url(self):
-        return reverse('blog:post_detail', kwargs={'pk': self.post.pk})
+        return reverse('blog:post_detail', kwargs={'post_id': self.post.pk})
