@@ -108,7 +108,6 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
 class PostDeleteView(LoginRequiredMixin, DeleteView):
     model = Post
-    form_class = PostForm
     template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
 
@@ -176,10 +175,6 @@ class CommentUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_queryset(self):
         return self.model.objects.filter(author=self.request.user)
-
-    def get_success_url(self):
-        return reverse('blog:post_detail',
-                       kwargs={'post_id': self.object.post.pk})
 
 
 class CommentDeleteView(LoginRequiredMixin, DeleteView):
