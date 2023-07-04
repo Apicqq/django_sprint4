@@ -19,7 +19,7 @@ class PostForm(forms.ModelForm):
 class CommentForm(forms.ModelForm):
     class Meta:
         model = Comment
-        exclude = ('author', 'post',)
+        exclude = ('author', 'post', 'is_published')
 
 
 class UserForm(forms.ModelForm):

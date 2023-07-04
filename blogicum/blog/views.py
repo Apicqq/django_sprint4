@@ -1,6 +1,6 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -12,18 +12,21 @@ from django.views.generic import (CreateView,
                                   UpdateView)
 from django.views.generic.list import MultipleObjectMixin
 
+from blog.constants import PAGINATION_VALUE
 from blog.forms import PostForm, CommentForm, UserForm
 from blog.models import Category, Post, Comment, User
-from blog.utils import PAGINATION_VALUE
 
 
-def get_base_queryset():
+def get_base_queryset(queryset=None):
+    if queryset:
+        return queryset.prefetch_related('comments').annotate(
+            comment_count=Count('comments'))
     return Post.objects.select_related(
         'category',
         'author',
         'location'
     ).prefetch_related('comments').annotate(
-        comment_count=Count('comments')).order_by('-pub_date')
+        comment_count=Count('comments'))
 
 
 class BlogListView(ListView):
@@ -32,11 +35,11 @@ class BlogListView(ListView):
     template_name = 'blog/index.html'
 
     def get_queryset(self):
-        return get_base_queryset().filter(
-            Q(is_published=True)
-            & Q(pub_date__lte=now())
-            & Q(category__is_published=True)
-        )  # По-моему, так будет ещё короче
+        return get_base_queryset().order_by('-pub_date').filter(
+            is_published=True,
+            pub_date__lte=now(),
+            category__is_published=True
+        )
 
 
 class BlogCategoryView(ListView):
@@ -44,18 +47,17 @@ class BlogCategoryView(ListView):
     template_name = 'blog/category.html'
 
     def get_context_data(self, *args, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['category'] = get_object_or_404(
+        category = get_object_or_404(
             Category,
             is_published=True,
             slug=self.kwargs['category_slug'])
-        context['page_obj'] = Paginator(
-            get_base_queryset().filter(
-                Q(is_published=True)
-                & Q(pub_date__lte=now())
-                & Q(category__is_published=True,
-                    category=context['category'])
-            ), PAGINATION_VALUE).get_page(context['page_obj'])
+        post_list = Paginator(
+            get_base_queryset(category.posts).order_by('-pub_date').filter(
+                is_published=True,
+                pub_date__lte=now()
+            ), PAGINATION_VALUE).get_page(category)
+        context = super(BlogCategoryView, self).get_context_data(
+            category=category, page_obj=post_list, **kwargs)
         return context
 
 
@@ -128,16 +130,13 @@ class UserDetailView(DetailView, MultipleObjectMixin):
 
     def get_context_data(self, **kwargs):
         profile = self.get_object()
-        object_list = get_base_queryset().filter(author=profile)
+        object_list = get_base_queryset().order_by('-pub_date').filter(
+            author=profile)
         if self.request.user != profile:
-            object_list = get_base_queryset().filter(
-                author=profile,
+            object_list = object_list.filter(
                 is_published=True,
                 category__is_published=True,
                 pub_date__lte=now())
-            # Тесты проходят без фильтров по категории и времени публикации,
-            # но это нелогично: сторонние пользователи не должны
-            # видеть отложенные посты и посты из "распубликованных" категорий.
         context = super(UserDetailView, self).get_context_data(
             object_list=object_list,
             profile=profile, **kwargs)
@@ -148,15 +147,14 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
     model = User
     template_name = 'blog/user.html'
     form_class = UserForm
+    slug_url_kwarg = 'username'
+    slug_field = 'username'
 
     def get_success_url(self):
         return reverse(
             'blog:profile',
             kwargs={'username': self.request.user}
         )
-
-    def get_object(self, queryset=None):
-        return self.model.objects.get(username=self.request.user.username)
 
 
 class CommentCreateView(LoginRequiredMixin, CreateView):

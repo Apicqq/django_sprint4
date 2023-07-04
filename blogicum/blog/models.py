@@ -3,7 +3,7 @@ from django.db import models
 from django.urls import reverse
 
 from core.models import PublishedCreatedModel
-from .utils import STRING_MAX_LENGTH, TITLE_MAX_LENGTH
+from blog.constants import STRING_MAX_LENGTH, TITLE_MAX_LENGTH
 
 User = get_user_model()
 
