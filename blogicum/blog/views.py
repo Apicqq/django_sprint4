@@ -1,4 +1,5 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Count
 from django.http import Http404
@@ -27,6 +28,13 @@ def get_base_queryset(queryset=None):
         'location'
     ).prefetch_related('comments').annotate(
         comment_count=Count('comments'))
+
+
+class DeleteMixin:
+    def dispatch(self, request, *args, **kwargs):
+        if self.get_object().author != self.request.user:
+            raise PermissionDenied()
+        return super().dispatch(request, *args, **kwargs)
 
 
 class BlogListView(ListView):
@@ -83,9 +91,9 @@ class PostDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['comments'] = self.object.comments.select_related('author')
-        context['form'] = CommentForm()
-        return context
+        return dict(**context,
+                    comments=self.object.comments.select_related('author'),
+                    form=CommentForm())
 
     def dispatch(self, request, *args, **kwargs):
         if (self.get_object().author != self.request.user
@@ -106,7 +114,7 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
         return super().dispatch(request, *args, **kwargs)
 
 
-class PostDeleteView(LoginRequiredMixin, DeleteView):
+class PostDeleteView(LoginRequiredMixin, DeleteMixin, DeleteView):
     model = Post
     template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
@@ -114,10 +122,10 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
     def get_success_url(self):
         return reverse('blog:index')
 
-    def delete(self, request, *args, **kwargs):
-        if self.get_object().author != self.request.user:
-            return redirect(self.get_success_url())
-        return super().delete(request)
+    # def delete(self, request, *args, **kwargs):
+    #     if self.get_object().author != self.request.user:
+    #         return redirect(self.get_success_url())
+    #     return super().delete(request)
 
 
 class UserDetailView(DetailView, MultipleObjectMixin):
@@ -177,15 +185,15 @@ class CommentUpdateView(LoginRequiredMixin, UpdateView):
         return self.model.objects.filter(author=self.request.user)
 
 
-class CommentDeleteView(LoginRequiredMixin, DeleteView):
+class CommentDeleteView(LoginRequiredMixin, DeleteMixin, DeleteView):
     template_name = 'blog/comment.html'
     model = Comment
     pk_url_kwarg = 'comment_id'
 
-    def delete(self, request, *args, **kwargs):
-        if self.get_object().author != self.request.user:
-            return redirect(self.get_success_url())
-        return super().delete(request)
+    # def delete(self, request, *args, **kwargs):
+    #     if self.get_object().author != self.request.user:
+    #         return redirect(self.get_success_url())
+    #     return super().delete(request)
 
     def get_success_url(self):
         return reverse('blog:post_detail',
