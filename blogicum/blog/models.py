@@ -1,11 +1,36 @@
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Count
 from django.urls import reverse
+from django.utils.timezone import now
 
-from core.models import PublishedCreatedModel
 from blog.constants import STRING_MAX_LENGTH, TITLE_MAX_LENGTH
+from core.models import PublishedCreatedModel
 
 User = get_user_model()
+
+
+class PostQueryset(models.QuerySet):
+
+    def annotated(self):
+        return self.annotate(comment_count=Count('comments'))
+
+    def prefetched(self):
+        return self.prefetch_related('comments')
+
+    def select_relatable(self):
+        return self.select_related('category',
+                                   'author',
+                                   'location')
+
+    def category_is_published(self):
+        return self.filter(category__is_published=True)
+
+    def published(self):
+        return self.filter(is_published=True)
+
+    def pub_date(self):
+        return self.filter(pub_date__lte=now())
 
 
 class Post(PublishedCreatedModel):
@@ -39,6 +64,7 @@ class Post(PublishedCreatedModel):
         upload_to='posts/',
         blank=True
     )
+    objects = PostQueryset.as_manager()
 
     class Meta(PublishedCreatedModel.Meta):
         verbose_name = 'публикация'

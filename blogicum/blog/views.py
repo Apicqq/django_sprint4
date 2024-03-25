@@ -1,11 +1,9 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.utils.timezone import now
 from django.views.generic import (CreateView,
                                   DeleteView,
                                   DetailView,
@@ -18,19 +16,7 @@ from blog.forms import PostForm, CommentForm, UserForm
 from blog.models import Category, Post, Comment, User
 
 
-def get_base_queryset(queryset=None):
-    if queryset:
-        return queryset.prefetch_related('comments').annotate(
-            comment_count=Count('comments'))
-    return Post.objects.select_related(
-        'category',
-        'author',
-        'location'
-    ).prefetch_related('comments').annotate(
-        comment_count=Count('comments'))
-
-
-class DeleteMixin:
+class DeleteMixin():
     def dispatch(self, request, *args, **kwargs):
         if self.get_object().author != self.request.user:
             raise PermissionDenied()
@@ -43,11 +29,9 @@ class BlogListView(ListView):
     template_name = 'blog/index.html'
 
     def get_queryset(self):
-        return get_base_queryset().order_by('-pub_date').filter(
-            is_published=True,
-            pub_date__lte=now(),
-            category__is_published=True
-        )
+        return (Post.objects.prefetched().select_relatable().
+                annotated().category_is_published().published()
+                .pub_date().order_by('-pub_date'))
 
 
 class BlogCategoryView(ListView):
@@ -55,15 +39,15 @@ class BlogCategoryView(ListView):
     template_name = 'blog/category.html'
 
     def get_context_data(self, *args, **kwargs):
+        page_number = self.request.GET.get('page')
         category = get_object_or_404(
             Category,
             is_published=True,
             slug=self.kwargs['category_slug'])
         post_list = Paginator(
-            get_base_queryset(category.posts).order_by('-pub_date').filter(
-                is_published=True,
-                pub_date__lte=now()
-            ), PAGINATION_VALUE).get_page(category)
+            category.posts.prefetched().annotated().order_by(
+                '-pub_date').published().pub_date(),
+            PAGINATION_VALUE).get_page(page_number)
         context = super(BlogCategoryView, self).get_context_data(
             category=category, page_obj=post_list, **kwargs)
         return context
@@ -122,11 +106,6 @@ class PostDeleteView(LoginRequiredMixin, DeleteMixin, DeleteView):
     def get_success_url(self):
         return reverse('blog:index')
 
-    # def delete(self, request, *args, **kwargs):
-    #     if self.get_object().author != self.request.user:
-    #         return redirect(self.get_success_url())
-    #     return super().delete(request)
-
 
 class UserDetailView(DetailView, MultipleObjectMixin):
     model = User
@@ -137,13 +116,13 @@ class UserDetailView(DetailView, MultipleObjectMixin):
 
     def get_context_data(self, **kwargs):
         profile = self.get_object()
-        object_list = get_base_queryset().order_by('-pub_date').filter(
-            author=profile)
+        object_list = (
+            Post.objects.select_relatable().prefetched().annotated().order_by(
+                '-pub_date').filter(
+                author=profile))
         if self.request.user != profile:
-            object_list = object_list.filter(
-                is_published=True,
-                category__is_published=True,
-                pub_date__lte=now())
+            object_list = (object_list.published().
+                           category_is_published().pub_date())
         context = super(UserDetailView, self).get_context_data(
             object_list=object_list,
             profile=profile, **kwargs)
@@ -162,6 +141,11 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
             'blog:profile',
             kwargs={'username': self.request.user}
         )
+
+    def dispatch(self, request, *args, **kwargs):
+        if self.request.user != self.get_object():
+            raise PermissionDenied()
+        return super().dispatch(request, *args, **kwargs)
 
 
 class CommentCreateView(LoginRequiredMixin, CreateView):
@@ -189,11 +173,6 @@ class CommentDeleteView(LoginRequiredMixin, DeleteMixin, DeleteView):
     template_name = 'blog/comment.html'
     model = Comment
     pk_url_kwarg = 'comment_id'
-
-    # def delete(self, request, *args, **kwargs):
-    #     if self.get_object().author != self.request.user:
-    #         return redirect(self.get_success_url())
-    #     return super().delete(request)
 
     def get_success_url(self):
         return reverse('blog:post_detail',
